@@ -1,6 +1,6 @@
 FROM alpine:3.15
 
-RUN apk add --no-cache curl jq mysql-client py-pip python libc6-compat && pip install s4cmd
+RUN apk add --no-cache curl jq mysql-client py-pip python3 libc6-compat && pip install s4cmd
 
 ADD orchestrator.sh /orchestrator.sh
 ADD mysql.sh /mysql.sh
