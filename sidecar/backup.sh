@@ -30,7 +30,7 @@ tar -zcvf /backup/$DB_NAME/latest/$DB_NAME.sql.gz /backup/$DB_NAME/latest
 echo "Backup complete. Uploading to S3..."
 
 # Upload backup directory to S3
-s3cmd sync /backup/$DB_NAME s3://$S3_BUCKET
+s4cmd sync /backup/$DB_NAME s3://$S3_BUCKET
 
 # Delete backups older than 7 days
 find /backup/* -mtime +7 -exec rm {} \;
