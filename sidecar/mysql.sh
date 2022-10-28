@@ -84,7 +84,7 @@ EOF
       echo "Restoring latest backup from S3..."
       mkdir -p /tmp/$DB_NAME
       s3cmd --recursive get s3://$S3_BUCKET/$DB_NAME/latest/ /tmp/$DB_NAME
-      myloader -d /tmp/$DB_NAME -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
+      myloader -d /tmp/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
     fi
 
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL read_only=OFF"
