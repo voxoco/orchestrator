@@ -83,7 +83,7 @@ EOF
     if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest | wc -l)" -gt 0 ]; then
       echo "Restoring latest backup from S3..."
       mkdir -p /tmp/$DB_NAME
-      s4cmd --recursive --NUM-THREADS=4 get s3://$S3_BUCKET/$DB_NAME/latest/ /tmp/$DB_NAME
+      s4cmd --recursive -c 4 get s3://$S3_BUCKET/$DB_NAME/latest/ /tmp/$DB_NAME
       myloader -d /tmp/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
     fi
 
