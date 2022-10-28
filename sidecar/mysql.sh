@@ -59,9 +59,9 @@ GRANT SUPER, PROCESS, REPLICATION SLAVE, RELOAD ON *.* TO 'orchestrator'@'%';
 GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 GRANT DROP ON _pseudo_gtid_.* to 'orchestrator'@'%';
 CREATE DATABASE meta;
-CREATE TABLE meta.cluster (anchor TINYINT, cluster_alias VARCHAR(128), cluster_domain VARCHAR(128), dc VARCHAR(128), instance_alias VARCHAR(128), PRIMARY KEY (anchor)) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE TABLE meta.cluster (anchor TINYINT, cluster_alias VARCHAR(128), cluster_domain VARCHAR(128), dc VARCHAR(128), instance_alias VARCHAR(128), ready INT, PRIMARY KEY (anchor)) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 GRANT SELECT ON meta.* TO 'orchestrator'@'%';
-INSERT INTO meta.cluster (anchor, cluster_alias, cluster_domain, dc, instance_alias) VALUES (1, '$DB_NAME', '$DB_NAME.$POD_NAMESPACE', '$CLUSTER_NAME', '$HOSTNAME');
+INSERT INTO meta.cluster (anchor, cluster_alias, cluster_domain, dc, instance_alias, ready) VALUES (1, '$DB_NAME', '$DB_NAME.$POD_NAMESPACE', '$CLUSTER_NAME', '$HOSTNAME', 0);
 
 -- mysqld exporter
 CREATE USER 'mysqld_exporter'@'localhost' IDENTIFIED BY '123456';
@@ -90,10 +90,18 @@ EOF
 
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL read_only=OFF"
   else
-    echo "Found master. Adding this node as a slave..."
-    LOGFILE=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogFile)
-    LOGPOS=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogPos)
+    echo "Found master. Checking if it is ready..."
     MASTER=$(echo $MASTER | jq -r .Key.Hostname)
+    
+    while [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "select ready from meta.cluster where anchor=1" -s --skip-column-names)" -ne 1 ]; do
+      echo "Master is not ready, checking again in 5 seconds..."
+      sleep 5
+    done
+
+    # Get log file and position from master
+    LOG_INFO=$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "show master status" -s --skip-column-names)
+    LOG_FILE=$(echo $LOG_INFO | awk '{print $1}')
+    LOG_POS=$(echo $LOG_INFO | awk '{print $2}')
 
     # Restore from master
     cat << EOF > ./mydumper.ini
@@ -119,8 +127,8 @@ EOF
   echo "Adding this node $PODIP to orchestrator"
   curl -s http://orc:3000/api/discover/$PODIP/3306
 
-  # Touch ready.txt to indicate that this node is ready
-  touch /ready.txt
+  # Set meta.cluster.ready to 1
+  mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
 }
 
 # catch kill signals
