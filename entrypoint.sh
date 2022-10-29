@@ -32,18 +32,25 @@ cat <<EOF > /opt/orchestrator/orchestrator.conf.json
   "RecoverMasterClusterFilters": [".*"],
   "RecoverIntermediateMasterClusterFilters": [".*"],
   "OnFailureDetectionProcesses": [
-    "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}' >> /tmp/recovery.log"
+    "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}' >> /tmp/recovery.log",
+    "/opt/orchestrator/slack.sh 'WARN' 'Detected {failureType} on {failureCluster}' 'Affected replicas: {countSlaves}'"
   ],
   "PreGracefulTakeoverProcesses": [
-    "echo 'Planned takeover about to take place on {failureCluster}. Master will switch to read_only' >> /tmp/recovery.log"
+    "echo 'Planned takeover about to take place on {failureCluster}. Master will switch to read_only' >> /tmp/recovery.log",
+    "/opt/orchestrator/slack.sh 'INFO' 'Planned takeover about to take place on {failureCluster}' 'Master will switch to read_only'"
   ],
   "PreFailoverProcesses": [
-    "echo 'Will recover from {failureType} on {failureCluster}' >> /tmp/recovery.log"
+    "echo 'Will recover from {failureType} on {failureCluster}' >> /tmp/recovery.log",
+    "/opt/orchestrator/slack.sh 'WARN' 'Pre failover running' 'Will recover from {failureType} on {failureCluster}'"
   ],
   "PostFailoverProcesses": [
-    "echo '(for all types) Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log"
+    "echo '(for all types) Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log",
+    "/opt/orchestrator/slack.sh 'INFO' 'Post failover' 'Recovered from {failureType} on {failureCluster}\nFailed: {failedHost}:{failedPort}\nSuccessor: {successorHost}:{successorPort}'"
   ],
-  "PostUnsuccessfulFailoverProcesses": [],
+  "PostUnsuccessfulFailoverProcesses": [
+    "echo 'Post Unsuccessful failover for {failedHost}' >> /tmp/recover.log",
+    "/opt/orchestrator/slack.sh 'INFO' 'Post unsuccessful failover' 'Failed host: {failedHost}'"
+  ],
   "PostMasterFailoverProcesses": [
     "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}' >> /tmp/recovery.log"
   ],
@@ -51,8 +58,9 @@ cat <<EOF > /opt/orchestrator/orchestrator.conf.json
     "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log"
   ],
   "PostGracefulTakeoverProcesses": [
-    "echo 'Planned takeover complete and started slave on {failedHost}' >> /tmp/recovery.log",
-    "curl -s http://127.0.0.1:3000/api/start-slave/{failedHost}/3306"
+    "echo 'Planned takeover complete' >> /tmp/recovery.log",
+    "curl -s http://127.0.0.1:3000/api/start-slave/{failedHost}/3306",
+    "/opt/orchestrator/slack.sh 'INFO' 'Planned takeover complete' 'Success status: {isSuccessful}\nNew master: {successorAlias}\nNew replica count: {countReplicas}'"
   ],
   "DetachLostSlavesAfterMasterFailover": true,
   "MasterFailoverDetachReplicaMasterHost": false,

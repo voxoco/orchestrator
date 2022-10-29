@@ -3,6 +3,9 @@
 # Last backup time in seconds since epoch
 LAST_BACKUP_TIME=$(date +%s)
 
+# LAST_SLAVE_CHECK_TIME is the last time we checked slave replication status
+LAST_SLAVE_CHECK_TIME=$(date +%s)
+
 exit_script() {
   echo "Tearing down..."
   trap - SIGINT SIGTERM # clear the trap
@@ -113,7 +116,7 @@ database = $DB_NAME
 outdir = ./dumper-sql
 chunksize = 128
 EOF
-    
+
     mydumper -c ./mydumper.ini
     myloader -d ./dumper-sql -h 127.0.0.1 -u root -p $MYSQL_ROOT_PASSWORD -t 4
 
@@ -130,6 +133,69 @@ EOF
   mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
 }
 
+backup() {
+  echo "Checking if we are the master"
+  if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" != "$PODIP" ]; then return; fi
+
+  echo "Backing up..."
+  NOW=$(date +"%Y-%m-%d_%H-%M-%S")
+
+  rm -rf ./mydumper.ini
+
+  cat << EOF > ./mydumper.ini
+[mysql]
+host = 127.0.0.1
+user = root
+password = $MYSQL_ROOT_PASSWORD
+port = 3306
+database = $DB_NAME
+outdir = ./backup/$DB_NAME/$NOW
+chunksize = 128
+EOF
+
+  mydumper -c ./mydumper.ini
+
+  # Copy backup to /backup/$DB_NAME/latest
+  rm -rf /backup/$DB_NAME/latest
+  mkdir -p /backup/$DB_NAME/latest
+  cp -r /backup/$DB_NAME/$NOW/* /backup/$DB_NAME/latest
+
+  # Gzip latest backup
+  rm -rf /backup/$DB_NAME/latest/$DB_NAME.sql.gz
+  tar -zcvf /backup/$DB_NAME/latest/$DB_NAME.sql.gz /backup/$DB_NAME/latest
+
+  echo "Backup complete. Uploading to S3..."
+
+  # Upload backup directory to S3
+  s4cmd sync /backup/$DB_NAME s3://$S3_BUCKET
+
+  # Delete backups older than 7 days
+  find /backup/* -mtime +7 -exec rm {} \;
+
+  echo "Backup uploaded to S3 and local backups older than 7 days deleted."
+}
+
+check_slave_status() {
+  # Check read_only flag to see if we are a slave
+  if [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "select @@read_only" -s --skip-column-names)" != "1" ]; then return; fi
+  echo "Time to check if slave is still replicating..."
+  
+  # Check if slave is still replicating
+  SLAVE_STATUS=$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "show slave status\G")
+  SLAVE_IO_RUNNING=$(echo "$SLAVE_STATUS" | grep Slave_IO_Running | awk '{print $2}')
+  SLAVE_SQL_RUNNING=$(echo "$SLAVE_STATUS" | grep Slave_SQL_Running | awk '{print $2}')
+  
+  if [ "$SLAVE_IO_RUNNING" == "Yes" ] && [ "$SLAVE_SQL_RUNNING" == "Yes" ]; then return; fi
+  echo "Slave not replicating, sending slack notification..."
+  
+  # Get errors
+  SLAVE_IO_ERROR=$(echo "$SLAVE_STATUS" | grep Last_IO_Error | awk '{print $2}')
+  SLAVE_SQL_ERROR=$(echo "$SLAVE_STATUS" | grep Last_SQL_Error | awk '{print $2}')
+  
+  # Send slack notification
+  ./slack.sh "ERROR" "Slave not replicating on $PODIP" "IO Error: $SLAVE_IO_ERROR\nSQL Error: $SLAVE_SQL_ERROR"
+}
+
 # catch kill signals
 trap exit_script SIGINT SIGTERM
 
@@ -138,12 +204,15 @@ bootstrap
 
 while true; do
   sleep 1
-  # BACKUP_INTERVAL_HOURS is in hours so convert to seconds
+  # Run backup if it's time
   if [ $(($(date +%s) - $LAST_BACKUP_TIME)) -gt $(($BACKUP_INTERVAL_HOURS * 3600)) ]; then
-    # Check if we are the master before backing up
-    if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
-      ./backup.sh
-      LAST_BACKUP_TIME=$(date +%s)
-    fi
+    backup
+    LAST_BACKUP_TIME=$(date +%s)
+  fi
+
+  # Slave status check every minute
+  if [ $(($(date +%s) - $LAST_SLAVE_CHECK_TIME)) -gt 60 ]; then
+    check_slave_status
+    LAST_SLAVE_CHECK_TIME=$(date +%s)
   fi
 done
