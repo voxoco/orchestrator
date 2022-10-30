@@ -20,8 +20,7 @@ RUN cp /tmp/orchestrator/usr/local/orchestrator/orchestrator /opt/orchestrator &
 RUN rm -rf /tmp/orchestrator*
 
 ADD entrypoint.sh /entrypoint.sh
-ADD slack.sh /slack.sh
-RUN chmod +x /entrypoint.sh
-RUN chmod +x /slack.sh
+ADD sidecar/slack.sh /slack.sh
+RUN chmod +x /entrypoint.sh /slack.sh
 
 CMD /entrypoint.sh
