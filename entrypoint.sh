@@ -18,6 +18,7 @@ cat <<EOF > /opt/orchestrator/orchestrator.conf.json
   "SQLite3DataFile": "/opt/orchestrator/orchestrator.sqlite3",
   "DiscoverByShowSlaveHosts": true,
   "InstancePollSeconds": 5,
+  "UnseenInstanceForgetHours": 6,
   "HostnameResolveMethod": "none",
   "MySQLHostnameResolveMethod": "",
   "ReplicationLagQuery": "",

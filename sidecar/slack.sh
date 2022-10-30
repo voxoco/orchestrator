@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Send notification messages to a slack channel
 # Slack webhook URL should be an env variable named SLACK_WEBHOOK_URL

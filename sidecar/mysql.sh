@@ -9,18 +9,21 @@ LAST_SLAVE_CHECK_TIME=$(date +%s)
 exit_script() {
   echo "Tearing down..."
   trap - SIGINT SIGTERM # clear the trap
+
+  # Downtime this instance for 5hrs
+  curl -s http://127.0.0.1:3000/api/begin-downtime/$PODIP/3306/kill/kill/5h
   
   # Elect new master if we are the master
-  if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
-    echo "Electing new master..."
-    curl -s http://orc:3000/api/graceful-master-takeover-auto/$DB_NAME
-    echo "Graceful master takeover complete"
-    sleep 5
-  fi
+  #if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
+  #  echo "Electing new master..."
+  #  curl -s http://orc:3000/api/graceful-master-takeover-auto/$DB_NAME
+  #  echo "Graceful master takeover complete"
+  #  sleep 5
+  #fi
 
   # Remove this node from the orchestrator cluster
-  echo "Removing this node $PODIP from orchestrator"
-  curl -s http://orc:3000/api/forget/$PODIP/3306 | jq .
+  #echo "Removing this node $PODIP from orchestrator"
+  #curl -s http://orc:3000/api/forget/$PODIP/3306 | jq .
 }
 
 bootstrap() {
@@ -131,6 +134,9 @@ EOF
 
   # Set meta.cluster.ready to 1
   mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
+
+  # Ack recoveries
+  curl -s "http://localhost:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
 }
 
 backup() {
