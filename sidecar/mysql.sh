@@ -9,17 +9,13 @@ LAST_SLAVE_CHECK_TIME=$(date +%s)
 exit_script() {
   echo "Tearing down..."
   trap - SIGINT SIGTERM # clear the trap
-
-  # Downtime this instance for 5hrs
-  #curl -s http://orc:3000/api/begin-downtime/$PODIP/3306/kill/kill/5h
   
   # Elect new master if we are the master
-  #if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
-  #  echo "Electing new master..."
-  #  curl -s http://orc:3000/api/graceful-master-takeover-auto/$DB_NAME
-  #  echo "Graceful master takeover complete"
-  #  sleep 5
-  #fi
+  if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
+    echo "Electing new master..."
+    curl -s http://orc:3000/api/force-master-failover/$DB_NAME
+    echo "force-master-failover complete"
+  fi
 
   # Remove this node from the orchestrator cluster
   #echo "Removing this node $PODIP from orchestrator"
