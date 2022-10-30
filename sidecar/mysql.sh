@@ -11,7 +11,7 @@ exit_script() {
   trap - SIGINT SIGTERM # clear the trap
 
   # Downtime this instance for 5hrs
-  curl -s http://127.0.0.1:3000/api/begin-downtime/$PODIP/3306/kill/kill/5h
+  curl -s http://orc:3000/api/begin-downtime/$PODIP/3306/kill/kill/5h
   
   # Elect new master if we are the master
   #if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
