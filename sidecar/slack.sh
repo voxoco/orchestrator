@@ -20,4 +20,4 @@ if [ "$1" == "WARN" ]; then COLOR="warning"; fi
 MESSAGE="payload={\"channel\": \"#$SLACK_CHANNEL\",\"attachments\":[{\"author_name\":\"orchestrator\",\"pretext\":\"$2\",\"text\":\"$3\",\"color\":\"$COLOR\"}]}"
 
 # Send message
-curl -X POST --data-urlencode "$MESSAGE" ${SLACK_WEBHOOK_URL}
+curl -s -X POST --data-urlencode "$MESSAGE" ${SLACK_WEBHOOK_URL}

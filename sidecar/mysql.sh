@@ -129,14 +129,14 @@ EOF
   fi
 
   # Add this node to orchestrator
-  echo "Adding this node $PODIP to orchestrator"
-  curl -s http://orc:3000/api/discover/$PODIP/3306
+  #echo "Adding this node $PODIP to orchestrator"
+  #curl -s http://orc:3000/api/discover/$PODIP/3306
 
   # Set meta.cluster.ready to 1
   mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
 
   # Ack recoveries
-  curl -s "http://localhost:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
+  curl -s "http://orc:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
 }
 
 backup() {
@@ -188,10 +188,10 @@ check_slave_status() {
   
   # Check if slave is still replicating
   SLAVE_STATUS=$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "show slave status\G")
-  SLAVE_IO_RUNNING=$(echo "$SLAVE_STATUS" | grep Slave_IO_Running | awk '{print $2}')
-  SLAVE_SQL_RUNNING=$(echo "$SLAVE_STATUS" | grep Slave_SQL_Running | awk '{print $2}')
+  SLAVE_IO_RUNNING=$(echo "$SLAVE_STATUS" | grep "Slave_IO_Running: Yes" | wc -l)
+  SLAVE_SQL_RUNNING=$(echo "$SLAVE_STATUS" | grep "Slave_SQL_Running: Yes" | wc -l)
   
-  if [ "$SLAVE_IO_RUNNING" == "Yes" ] && [ "$SLAVE_SQL_RUNNING" == "Yes" ]; then return; fi
+  if [ $SLAVE_IO_RUNNING == 1 ] && [ $SLAVE_SQL_RUNNING == 1 ]; then return; fi
   echo "Slave not replicating, sending slack notification..."
   
   # Get errors
