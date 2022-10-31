@@ -16,10 +16,6 @@ exit_script() {
     curl -s http://orc:3000/api/force-master-failover/$DB_NAME
     echo "force-master-failover complete"
   fi
-
-  # Remove this node from the orchestrator cluster
-  #echo "Removing this node $PODIP from orchestrator"
-  #curl -s http://orc:3000/api/forget/$PODIP/3306 | jq .
 }
 
 bootstrap() {
@@ -123,10 +119,6 @@ EOF
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "CHANGE MASTER TO MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_LOG_FILE='$LOG_FILE', MASTER_LOG_POS=$LOG_POS; START SLAVE;"
     echo "Replication started"
   fi
-
-  # Add this node to orchestrator
-  #echo "Adding this node $PODIP to orchestrator"
-  #curl -s http://orc:3000/api/discover/$PODIP/3306
 
   # Set meta.cluster.ready to 1
   mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
