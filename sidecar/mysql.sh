@@ -78,10 +78,11 @@ EOF
     echo "No master found, this is the first node."
 
     # Restore latest backup from S3 if it exists
-    if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest | wc -l)" -gt 0 ]; then
+    if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest.sql.gz | wc -l)" -gt 0 ]; then
       echo "Restoring latest backup from S3..."
+      s4cmd get s3://$S3_BUCKET/$DB_NAME/latest.sql.gz /tmp
       mkdir -p /tmp/$DB_NAME
-      s4cmd --recursive -c 4 get s3://$S3_BUCKET/$DB_NAME/latest/ /tmp/$DB_NAME
+      tar -xzf /tmp/latest.sql.gz -C /tmp/$DB_NAME
       myloader -d /tmp/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
     fi
 
@@ -149,22 +150,18 @@ EOF
 
   mydumper -c ./mydumper.ini
 
-  # Copy backup to /backup/$DB_NAME/latest
-  rm -rf /backup/$DB_NAME/latest
-  mkdir -p /backup/$DB_NAME/latest
-  cp -r /backup/$DB_NAME/$NOW/* /backup/$DB_NAME/latest
-
   # Gzip latest backup
-  rm -rf /backup/$DB_NAME/latest/$DB_NAME.sql.gz
-  tar -zcvf /backup/$DB_NAME/latest/$DB_NAME.sql.gz /backup/$DB_NAME/latest
+  rm -rf ./backup/$DB_NAME/latest.sql.gz
+  tar -zcvf ./backup/$DB_NAME/latest.sql.gz ./backup/$DB_NAME/$NOW
+  cp ./backup/$DB_NAME/latest.sql.gz ./backup/$DB_NAME/$NOW.sql.gz
 
   echo "Backup complete. Uploading to S3..."
 
   # Upload backup directory to S3
-  s4cmd sync /backup/$DB_NAME s3://$S3_BUCKET
+  s4cmd sync ./backup/$DB_NAME s3://$S3_BUCKET
 
   # Delete backups older than 7 days
-  find /backup/* -mtime +7 -exec rm {} \;
+  find ./backup/* -mtime +7 -exec rm {} \;
 
   echo "Backup uploaded to S3 and local backups older than 7 days deleted."
 }
