@@ -20,7 +20,7 @@ seed_mysql_servers() {
   REPLACE into mysql_servers (hostgroup_id, hostname, port) values (0, '$MASTER', 3306);"
 
   # Get the list of slaves
-  SLAVES=$(curl -m 1 -s http://orc:3000/api/instance-replicas/$MASTER/3306 | jq -r ".[] | select(.ReplicationSQLThreadRuning == true and .ReplicationIOThreadRuning == true) | select(.DataCenter == \"$CLUSTER_NAME\") | .Key.Hostname")
+  SLAVES=$(curl -m 1 -s http://orc:3000/api/instance-replicas/$MASTER/3306 | jq -r ".[] | select(.ReplicationSQLThreadRuning == true and .ReplicationIOThreadRuning == true and .IsLastCheckValid == true) | select(.DataCenter == \"$CLUSTER_NAME\") | .Key.Hostname")
 
   # Check if master is in our datacenter
   if [ "$(curl -m 1 -s http://orc:3000/api/instance/$MASTER/3306 | jq -r .DataCenter)" == "$CLUSTER_NAME" ]; then
