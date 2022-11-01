@@ -97,9 +97,11 @@ EOF
     done
 
     # Get log file and position from master
-    LOG_INFO=$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "show master status" -s --skip-column-names)
-    LOG_FILE=$(echo $LOG_INFO | awk '{print $1}')
-    LOG_POS=$(echo $LOG_INFO | awk '{print $2}')
+    #LOG_FILE=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogFile)
+    #LOG_POS=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogPos)
+
+    # Get Executed GTID Set from master
+    GTID_PURGED=$(echo $MASTER | jq -r .ExecutedGtidSet)
 
     # Restore from master
     cat << EOF > ./mydumper.ini
@@ -116,8 +118,8 @@ EOF
     mydumper -c ./mydumper.ini
     myloader -d ./dumper-sql -h 127.0.0.1 -u root -p $MYSQL_ROOT_PASSWORD -t 4
 
-    echo "Changing master to $MASTER at $LOG_FILE:$LOG_POS"
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_LOG_FILE='$LOG_FILE', MASTER_LOG_POS=$LOG_POS; START SLAVE;"
+    echo "Changing master to $MASTER at GTID: $GTID_PURGED"
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET @@GLOBAL.GTID_PURGED='$GTID_PURGED'; CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
     echo "Replication started"
   fi
 
