@@ -133,12 +133,12 @@ EOF
     myloader -d ./dumper-sql -h 127.0.0.1 -u root -p $MYSQL_ROOT_PASSWORD -t 4
 
     echo "Changing master to $MASTER at GTID: $GTID_PURGED"
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET SESSION SQL_LOG_BIN=0; SET GLOBAL GTID_PURGED='$GTID_PURGED'; CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL GTID_PURGED='$GTID_PURGED'; CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
     echo "Replication started"
   fi
 
   # Set meta.cluster.ready to 1
-  mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
+  mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET SESSION SQL_LOG_BIN=0; UPDATE meta.cluster SET ready=1 WHERE anchor=1"
 
   # Get raft leader
   raft_leader
