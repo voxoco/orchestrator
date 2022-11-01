@@ -97,6 +97,11 @@ EOF
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL read_only=OFF"
   else
     echo "Found master. Checking if it is ready..."
+
+    # Get Executed GTID Set from master
+    GTID_PURGED=$(echo $MASTER | jq -r .ExecutedGtidSet)
+
+    # Set master
     MASTER=$(echo $MASTER | jq -r .Key.Hostname)
     
     while [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "select ready from meta.cluster where anchor=1" -s --skip-column-names)" -ne 1 ]; do
@@ -107,9 +112,6 @@ EOF
     # Get log file and position from master
     #LOG_FILE=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogFile)
     #LOG_POS=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogPos)
-
-    # Get Executed GTID Set from master
-    GTID_PURGED=$(echo $MASTER | jq -r .ExecutedGtidSet)
 
     # Restore from master
     cat << EOF > ./mydumper.ini
