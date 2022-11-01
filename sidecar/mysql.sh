@@ -115,8 +115,17 @@ outdir = ./dumper-sql
 chunksize = 128
 EOF
 
+    # Dump from master
     mydumper -c ./mydumper.ini
+    
+    # Set SQL_LOG_BIN to 0
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL SQL_LOG_BIN=0;"
+
+    # Import dump
     myloader -d ./dumper-sql -h 127.0.0.1 -u root -p $MYSQL_ROOT_PASSWORD -t 4
+
+    # Set SQL_LOG_BIN to 1
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL SQL_LOG_BIN=1;"
 
     echo "Changing master to $MASTER at GTID: $GTID_PURGED"
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET @@GLOBAL.GTID_PURGED='$GTID_PURGED'; CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
@@ -135,7 +144,7 @@ backup() {
   if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" != "$PODIP" ]; then return; fi
 
   echo "Backing up..."
-  NOW=$(date +"%Y-%m-%d_%H-%M-%S")
+  NOW=$(date +"%Y_%m_%d_%H_%M_%S")
 
   rm -rf ./mydumper.ini
 
@@ -155,12 +164,13 @@ EOF
   # Gzip latest backup
   rm -rf ./backup/$DB_NAME/latest.sql.gz
   tar -zcvf ./backup/$DB_NAME/latest.sql.gz ./backup/$DB_NAME/$NOW
+  rm -rf ./backup/$DB_NAME/$NOW
   cp ./backup/$DB_NAME/latest.sql.gz ./backup/$DB_NAME/$NOW.sql.gz
 
   echo "Backup complete. Uploading to S3..."
 
   # Upload backup directory to S3
-  s4cmd sync ./backup/$DB_NAME s3://$S3_BUCKET
+  s4cmd sync ./backup/$DB_NAME s3://$S3_BUCKET/$DB_NAME
 
   # Delete backups older than 7 days
   find ./backup/* -mtime +7 -exec rm {} \;
