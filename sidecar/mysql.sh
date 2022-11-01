@@ -137,6 +137,10 @@ EOF
 
   # Ack recoveries
   curl -s "http://orc:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
+
+  # Add this node to orchestrator
+  echo "Adding this node $PODIP to orchestrator"
+  curl -s http://orc:3000/api/discover/$PODIP/3306
 }
 
 backup() {
