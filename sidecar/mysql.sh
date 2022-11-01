@@ -6,14 +6,22 @@ LAST_BACKUP_TIME=$(date +%s)
 # LAST_SLAVE_CHECK_TIME is the last time we checked slave replication status
 LAST_SLAVE_CHECK_TIME=$(date +%s)
 
+raft_leader() {
+  # Get current raft leader
+  RAFT_LEADER=$(curl -m 1 -s http://orc:3000/api/raft-leader | jq -r | sed 's/:.*//')
+}
+
 exit_script() {
   echo "Tearing down..."
   trap - SIGINT SIGTERM # clear the trap
+
+  # Get raft leader
+  raft_leader
   
   # Elect new master if we are the master
-  if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
+  if [ "$(curl -m 1 -s http://$RAFT_LEADER:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" == "$PODIP" ]; then
     echo "Electing new master..."
-    curl -s http://orc:3000/api/force-master-failover/$DB_NAME
+    curl -s http://$RAFT_LEADER:3000/api/force-master-failover/$DB_NAME
     echo "force-master-failover complete"
   fi
 }
@@ -113,19 +121,14 @@ port = 3306
 database = $DB_NAME
 outdir = ./dumper-sql
 chunksize = 128
+vars = "SQL_LOG_BIN=0;"
 EOF
 
     # Dump from master
     mydumper -c ./mydumper.ini
-    
-    # Set SQL_LOG_BIN to 0
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL SQL_LOG_BIN=0;"
 
     # Import dump
     myloader -d ./dumper-sql -h 127.0.0.1 -u root -p $MYSQL_ROOT_PASSWORD -t 4
-
-    # Set SQL_LOG_BIN to 1
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL SQL_LOG_BIN=1;"
 
     echo "Changing master to $MASTER at GTID: $GTID_PURGED"
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET @@GLOBAL.GTID_PURGED='$GTID_PURGED'; CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
@@ -135,12 +138,15 @@ EOF
   # Set meta.cluster.ready to 1
   mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "UPDATE meta.cluster SET ready=1 WHERE anchor=1"
 
+  # Get raft leader
+  raft_leader
+
   # Ack recoveries
-  curl -s "http://orc:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
+  curl -s "http://$RAFT_LEADER:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
 
   # Add this node to orchestrator
   echo "Adding this node $PODIP to orchestrator"
-  curl -s http://orc:3000/api/discover/$PODIP/3306
+  curl -s http://$RAFT_LEADER:3000/api/discover/$PODIP/3306
 }
 
 backup() {
