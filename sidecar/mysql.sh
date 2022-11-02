@@ -56,8 +56,8 @@ bootstrap() {
   sleep 5
 
   # If server_id is set to to something other than 1 just return
-  if [ $(mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "select @@server_id" -s --skip-column-names) -ne 1 ]; then
-    echo "server_id already set. Node has already been bootstrapped"
+  if [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "select ready from meta.cluster where anchor=1" -s --skip-column-names)" == 1 ]; then
+    echo "meta.ready already set to 1. Node has already been bootstrapped"
     return
   fi
 
