@@ -26,6 +26,25 @@ exit_script() {
   fi
 }
 
+restore() {
+  # Restore from latest backup
+  if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest.sql.gz | wc -l)" -gt 0 ]; then
+    echo "Restoring latest backup from S3..."
+    s4cmd get s3://$S3_BUCKET/$DB_NAME/latest.sql.gz /tmp
+    mkdir -p /tmp/$DB_NAME
+    tar -xzf /tmp/latest.sql.gz -C /tmp/$DB_NAME
+    myloader -d /tmp/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
+    
+    # Reset master
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "RESET MASTER;"
+
+    # Load GTID set
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 < /tmp/$DB_NAME/gtid.txt
+  else
+    echo "No backup found in S3"
+  fi
+}
+
 bootstrap() {
   echo "Bootstrapping..."
 
@@ -82,60 +101,25 @@ EOF
   # Get current master
   MASTER=$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME)
 
+  # Restore from backup
+  restore
+
   if [ "$(echo $MASTER | jq -r .Code)" == "ERROR" ]; then
     echo "No master found, this is the first node."
-
-    # Restore latest backup from S3 if it exists
-    if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest.sql.gz | wc -l)" -gt 0 ]; then
-      echo "Restoring latest backup from S3..."
-      s4cmd get s3://$S3_BUCKET/$DB_NAME/latest.sql.gz /tmp
-      mkdir -p /tmp/$DB_NAME
-      tar -xzf /tmp/latest.sql.gz -C /tmp/$DB_NAME
-      myloader -d /tmp/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
-    fi
-
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL read_only=OFF"
   else
     echo "Found master. Checking if it is ready..."
 
-    # Get Executed GTID Set from master
-    GTID_PURGED=$(echo $MASTER | jq -r .ExecutedGtidSet)
-
     # Set master
     MASTER=$(echo $MASTER | jq -r .Key.Hostname)
-    
+
     while [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "select ready from meta.cluster where anchor=1" -s --skip-column-names)" -ne 1 ]; do
       echo "Master is not ready, checking again in 5 seconds..."
       sleep 5
     done
 
-    # Get log file and position from master
-    #LOG_FILE=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogFile)
-    #LOG_POS=$(echo $MASTER | jq -r .SelfBinlogCoordinates.LogPos)
-
-    # Restore from master
-    cat << EOF > ./mydumper.ini
-[mysql]
-host = $MASTER
-user = root
-password = $MYSQL_ROOT_PASSWORD
-port = 3306
-database = $DB_NAME
-outdir = ./dumper-sql
-chunksize = 128
-vars = "SQL_LOG_BIN=0;"
-EOF
-
-    # Dump from master
-    mydumper -c ./mydumper.ini
-
-    # Import dump
-    myloader -d ./dumper-sql -h 127.0.0.1 -u root -p $MYSQL_ROOT_PASSWORD -t 4
-
-    echo "Changing master to $MASTER at GTID: $GTID_PURGED"
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "RESET MASTER;"
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SET GLOBAL GTID_PURGED='$GTID_PURGED'; CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
-    echo "Replication started"
+    echo "Changing master to $MASTER and starting replication..."
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "CHANGE MASTER TO MASTER_CONNECT_RETRY=1, MASTER_RETRY_COUNT=86400, MASTER_HOST='$MASTER', MASTER_USER='repl', MASTER_PASSWORD='repl', MASTER_AUTO_POSITION = 1; START SLAVE;"
   fi
 
   # Set meta.cluster.ready to 1
@@ -154,7 +138,11 @@ EOF
 
 backup() {
   echo "Checking if we are the master"
-  if [ "$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)" != "$PODIP" ]; then return; fi
+  MASTER=$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME)
+  if [ "$(echo $MASTER | jq -r .Key.Hostname)" != "$PODIP" ]; then return; fi
+
+  # Get Executed GTID Set from master
+  GTID_PURGED=$(echo $MASTER | jq -r .ExecutedGtidSet)
 
   echo "Backing up..."
   NOW=$(date +"%Y_%m_%d_%H_%M_%S")
@@ -173,6 +161,9 @@ chunksize = 128
 EOF
 
   mydumper -c ./mydumper.ini
+
+  # Write the Executed GTID Set to a file
+  echo "SET GLOBAL GTID_PURGED='$GTID_PURGED';" > ./backup/$DB_NAME/$NOW/gtid.txt
 
   # Gzip latest backup
   rm -rf ./backup/$DB_NAME/latest.sql.gz
