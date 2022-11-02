@@ -167,7 +167,8 @@ EOF
 
   # Gzip latest backup
   rm -rf ./backup/$DB_NAME/latest.sql.gz
-  tar -zcvf ./backup/$DB_NAME/latest.sql.gz ./backup/$DB_NAME/$NOW
+  cd ./backup/$DB_NAME
+  tar -zcvf ./backup/$DB_NAME/latest.sql.gz $NOW
   rm -rf ./backup/$DB_NAME/$NOW
   cp ./backup/$DB_NAME/latest.sql.gz ./backup/$DB_NAME/$NOW.sql.gz
 
