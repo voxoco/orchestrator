@@ -31,15 +31,14 @@ restore() {
   if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest.sql.gz | wc -l)" -gt 0 ]; then
     echo "Restoring latest backup from S3..."
     s4cmd get s3://$S3_BUCKET/$DB_NAME/latest.sql.gz /tmp
-    mkdir -p /tmp/restore
-    tar -xzf /tmp/latest.sql.gz -C /tmp/restore
-    myloader -d /tmp/restore/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
+    tar -xzf /tmp/latest.sql.gz -C /tmp
+    myloader -d /tmp/backup/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
     
     # Reset master
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "RESET MASTER;"
 
     # Load GTID set
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 < /tmp/restore/gtid.sql
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 < /tmp/backup/gtid.sql
   else
     echo "No backup found in S3"
   fi
@@ -156,19 +155,22 @@ user = root
 password = $MYSQL_ROOT_PASSWORD
 port = 3306
 database = $DB_NAME
-outdir = ./backup/$NOW/$DB_NAME
+outdir = ./backup/$NOW/backup/$DB_NAME
 chunksize = 128
 EOF
 
   mydumper -c ./mydumper.ini
 
   # Write the Executed GTID Set to a file
-  echo "SET GLOBAL GTID_PURGED='$GTID_PURGED';" > ./backup/$NOW/gtid.sql
+  echo "SET GLOBAL GTID_PURGED='$GTID_PURGED';" > ./backup/$NOW/backup/gtid.sql
 
   # Gzip latest backup
-  cd ./backup
-  tar -zcvf ./backup/latest.sql.gz $NOW
+  cd ./backup/$NOW
+  tar -zcvf ./backup/latest.sql.gz backup
   cp ./backup/latest.sql.gz ./backup/$NOW.sql.gz
+
+  # Remove inidividual files
+  rm -rf ./backup/$NOW
 
   echo "Backup complete. Uploading to S3..."
 
