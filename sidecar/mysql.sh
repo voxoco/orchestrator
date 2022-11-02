@@ -31,14 +31,15 @@ restore() {
   if [ "$(s4cmd ls s3://$S3_BUCKET/$DB_NAME/latest.sql.gz | wc -l)" -gt 0 ]; then
     echo "Restoring latest backup from S3..."
     s4cmd get s3://$S3_BUCKET/$DB_NAME/latest.sql.gz /tmp
-    tar -xzf /tmp/latest.sql.gz -C /tmp
-    myloader -d /tmp/backup/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
+    mkdir -p /tmp/restore
+    tar -xzf /tmp/latest.sql.gz -C /tmp/restore
+    myloader -d /tmp/restore/backup/$DB_NAME -u root -p $MYSQL_ROOT_PASSWORD -h 127.0.0.1 -t 4
     
     # Reset master
     mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "RESET MASTER;"
 
     # Load GTID set
-    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 < /tmp/backup/gtid.sql
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 < /tmp/restore/backup/gtid.sql
   else
     echo "No backup found in S3"
   fi
@@ -56,7 +57,7 @@ bootstrap() {
   sleep 5
 
   # If server_id is set to to something other than 1 just return
-  if [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h $MASTER -e "select ready from meta.cluster where anchor=1" -s --skip-column-names)" == 1 ]; then
+  if [ "$(mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "select ready from meta.cluster where anchor=1" -s --skip-column-names)" == 1 ]; then
     echo "meta.ready already set to 1. Node has already been bootstrapped"
     return
   fi
@@ -146,39 +147,39 @@ backup() {
   echo "Backing up..."
   NOW=$(date +"%Y_%m_%d_%H_%M_%S")
 
-  rm -rf ./mydumper.ini
+  rm -rf /tmp/mydumper.ini
 
-  cat << EOF > ./mydumper.ini
+  cat << EOF > /tmp/mydumper.ini
 [mysql]
 host = 127.0.0.1
 user = root
 password = $MYSQL_ROOT_PASSWORD
 port = 3306
 database = $DB_NAME
-outdir = ./backup/$NOW/backup/$DB_NAME
+outdir = /tmp/backup/$NOW/backup/$DB_NAME
 chunksize = 128
 EOF
 
-  mydumper -c ./mydumper.ini
+  mydumper -c /tmp/mydumper.ini
 
   # Write the Executed GTID Set to a file
-  echo "SET GLOBAL GTID_PURGED='$GTID_PURGED';" > ./backup/$NOW/backup/gtid.sql
+  echo "SET GLOBAL GTID_PURGED='$GTID_PURGED';" > /tmp/backup/$NOW/backup/gtid.sql
 
   # Gzip latest backup
-  cd ./backup/$NOW
-  tar -zcvf ./backup/latest.sql.gz backup
-  cp ./backup/latest.sql.gz ./backup/$NOW.sql.gz
+  cd /tmp/backup/$NOW
+  tar -zcvf /tmp/backup/latest.sql.gz backup
+  cp /tmp/backup/latest.sql.gz /tmp/backup/$NOW.sql.gz
 
   # Remove inidividual files
-  rm -rf ./backup/$NOW
+  rm -rf /tmp/backup/$NOW
 
   echo "Backup complete. Uploading to S3..."
 
   # Upload backup directory to S3
-  s4cmd sync ./backup s3://$S3_BUCKET/$DB_NAME
+  s4cmd sync /tmp/backup s3://$S3_BUCKET/$DB_NAME
 
   # Delete backups older than 7 days
-  find ./backup/* -mtime +7 -exec rm {} \;
+  find /tmp/backup/* -mtime +7 -exec rm {} \;
 
   echo "Backup uploaded to S3 and local backups older than 7 days deleted."
 }
