@@ -98,11 +98,14 @@ EOF
 
   echo "Node does not exist in orchestrator, adding..."
 
-  # Get current master
-  MASTER=$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME)
-
   # Restore from backup
   restore
+
+  # Sleep for a small random offset
+  sleep $(( ( RANDOM % 10 )  + 1 ))
+
+  # Get current master
+  MASTER=$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME)
 
   if [ "$(echo $MASTER | jq -r .Code)" == "ERROR" ]; then
     echo "No master found, this is the first node."
@@ -127,9 +130,6 @@ EOF
 
   # Get raft leader
   raft_leader
-
-  # Ack recoveries
-  curl -s "http://$RAFT_LEADER:3000/api/ack-recovery/cluster/$DB_NAME?comment=known"
 
   # Add this node to orchestrator
   echo "Adding this node $PODIP to orchestrator"
