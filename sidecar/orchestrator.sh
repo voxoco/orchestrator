@@ -15,6 +15,12 @@ exit_script() {
 bootstrap() {
   echo "Bootstrapping..."
 
+  # Make sure the web server responds with 200
+  while ! curl -m 1 -s http://127.0.0.1:3000 > /dev/null; do
+    echo "Waiting for Orchestrator web server to start..."
+    sleep 1
+  done
+
   # Make sure this node is actually online first
   while ! curl -m 1 -s http://127.0.0.1:3000/api/raft-status | jq -r .IsPartOfQuorum; do
     sleep 1
