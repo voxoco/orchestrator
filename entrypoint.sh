@@ -19,7 +19,7 @@ cat <<EOF > /opt/orchestrator/orchestrator.conf.json
   "DiscoverByShowSlaveHosts": true,
   "InstancePollSeconds": 5,
   "UnseenInstanceForgetHours": 1,
-  "RecoveryPeriodBlockSeconds": 5,
+  "RecoveryPeriodBlockSeconds": 600,
   "HostnameResolveMethod": "none",
   "MySQLHostnameResolveMethod": "",
   "ReplicationLagQuery": "",
