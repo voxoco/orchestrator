@@ -6,6 +6,9 @@ LAST_BACKUP_TIME=$(date +%s)
 # LAST_SLAVE_CHECK_TIME is the last time we checked slave replication status
 LAST_SLAVE_CHECK_TIME=$(date +%s)
 
+# SLAVE_HEALTHY is set to 1 if the slave is healthy
+SLAVE_HEALTHY=1
+
 raft_leader() {
   # Get current raft leader
   RAFT_LEADER=$(curl -m 1 -s http://orc:3000/api/raft-leader | jq -r | sed 's/:.*//')
@@ -13,11 +16,13 @@ raft_leader() {
 
 kv_put() {
   # PUT key/value pair in Consul
+  echo "Adding $1 to consul"
   curl -s -X PUT -d "$2" -H "X-Consul-Token: $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/$1"
 }
 
 kv_del() {
   # DELETE key/value pair in Consul
+  echo "Deleting $1 from consul"
   curl -s -X DELETE -H "X-Consul-Token: $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/$1"
 }
 
@@ -149,7 +154,6 @@ EOF
   curl -s http://$RAFT_LEADER:3000/api/discover/$PODIP/3306
 
   # Add this node to Consul
-  echo "Adding this node $PODIP to Consul"
   kv_put "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP" "3306"
 }
 
@@ -211,15 +215,37 @@ check_slave_status() {
   SLAVE_IO_RUNNING=$(echo "$SLAVE_STATUS" | grep "Slave_IO_Running: Yes" | wc -l)
   SLAVE_SQL_RUNNING=$(echo "$SLAVE_STATUS" | grep "Slave_SQL_Running: Yes" | wc -l)
   
-  if [ $SLAVE_IO_RUNNING == 1 ] && [ $SLAVE_SQL_RUNNING == 1 ]; then return; fi
-  echo "Slave not replicating, sending slack notification..."
+  if [ $SLAVE_IO_RUNNING == 1 ] && [ $SLAVE_SQL_RUNNING == 1 ]; then
+    # If SLAVE_HEALTHY was set to 0, reset it to 1 and add the node back to Consul
+    if [ "$SLAVE_HEALTHY" == "0" ]; then
+      echo "Slave is healthy again, adding it back to Consul"
+      SLAVE_HEALTHY=1
+      kv_put "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP" "3306"
+      ./slack.sh "INFO" "Slave started replicating on $PODIP" "Slave healthy again"
+    fi
+    return
+  fi
+
+  echo "Slave not replicating"
+
+  # If SLAVE_HEALTHY set to 0, just return
+  if [ "$SLAVE_HEALTHY" == "0" ]; then
+    echo "Slave unhealthy and already alerted, not doing anything"
+    return
+  fi
   
   # Get errors
   SLAVE_IO_ERROR=$(echo "$SLAVE_STATUS" | grep Last_IO_Error | awk '{print $2}')
   SLAVE_SQL_ERROR=$(echo "$SLAVE_STATUS" | grep Last_SQL_Error | awk '{print $2}')
+
+  # Delete this node from Consul
+  kv_del "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP"
   
   # Send slack notification
   ./slack.sh "ERROR" "Slave not replicating on $PODIP" "IO Error: $SLAVE_IO_ERROR\nSQL Error: $SLAVE_SQL_ERROR"
+
+  # Set SLAVE_HEALTHY to 0
+  SLAVE_HEALTHY=0
 }
 
 # catch kill signals

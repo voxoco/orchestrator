@@ -1,0 +1,11 @@
+{{$dbname := env "DB_NAME"}}
+{{$region := env "CLUSTER_NAME"}}
+{{ if keyExists "mysql/master/%s/hostname" $dbname }}
+DELETE FROM mysql_servers where hostgroup_id=0;
+REPLACE into mysql_servers (hostgroup_id, hostname) values ( 0, "{{ key "mysql/master/%s/hostname" $dbname }}" );
+{{ end }}
+{{ range tree "mysql/slave/%s/%s" $dbname $region }}
+REPLACE into mysql_servers (hostgroup_id, hostname) values ( 1, "{{ .Key }}" );
+{{ end }}
+LOAD MYSQL SERVERS TO RUNTIME;
+SAVE MYSQL SERVERS TO DISK;

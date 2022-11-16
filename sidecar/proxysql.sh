@@ -97,6 +97,9 @@ bootstrap() {
 
 bootstrap
 
+# Start consul-template
+consul-template -template="/proxysql.ctmpl:/proxysql.sql" -exec="mysql -u admin -padmin -h 127.0.0.1 -P 6032 < /proxysql.sql"
+
 while true ; do
   # Loop every 5 seconds and update the master and slaves
   sleep 5

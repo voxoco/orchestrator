@@ -6,6 +6,7 @@ ADD orchestrator.sh /orchestrator.sh
 ADD mysql.sh /mysql.sh
 ADD proxysql.sh /proxysql.sh
 ADD slack.sh /slack.sh
+ADD proxysql.ctmpl /proxysql.ctmpl
 ADD bin /usr/local/bin
 
 RUN chmod +x /orchestrator.sh /mysql.sh /proxysql.sh /slack.sh /usr/local/bin/*
