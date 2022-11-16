@@ -1,50 +1,5 @@
 #!/bin/sh
 
-INIT=1
-
-seed_mysql_servers() {
-  # Add the mysql servers from orchestrator
-  if [ "$DEBUG" == "1" ]; then echo "Adding mysql servers from orchestrator"; fi
-
-  # Get the current master
-  MASTER=$(curl -m 1 -s http://orc:3000/api/master/$DB_NAME | jq -r .Key.Hostname)
-  if [ "$MASTER" == "null" ] || [ "$MASTER" == "" ]; then 
-    echo "Could not get master from orchestrator"
-    if [ "$INIT" == "1" ]; then exit 1; else return 1; fi
-  fi
-
-  # Add the master
-  if [ "$DEBUG" == "1" ]; then echo "Adding master $MASTER"; fi
-  mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
-  DELETE FROM mysql_servers where hostgroup_id=0;
-  REPLACE into mysql_servers (hostgroup_id, hostname, port) values (0, '$MASTER', 3306);"
-
-  # Get the list of slaves
-  SLAVES=$(curl -m 1 -s http://orc:3000/api/instance-replicas/$MASTER/3306 | jq -r ".[] | select(.ReplicationSQLThreadRuning == true and .ReplicationIOThreadRuning == true and .IsLastCheckValid == true) | select(.DataCenter == \"$CLUSTER_NAME\") | .Key.Hostname")
-
-  # Check if master is in our datacenter
-  if [ "$(curl -m 1 -s http://orc:3000/api/instance/$MASTER/3306 | jq -r .DataCenter)" == "$CLUSTER_NAME" ]; then
-    # Add to SLAVES list
-    SLAVES="$SLAVES
-    $MASTER"
-  fi
-
-  # Clear hostgroup 1 if we have SLAVES
-  if [ "$SLAVES" != "" ]; then
-    mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "DELETE FROM mysql_servers where hostgroup_id=1;"
-  fi
-
-  # Add the slaves
-  for SLAVE in $SLAVES; do
-    if [ "$DEBUG" == "1" ]; then echo "Adding slave $SLAVE"; fi
-    mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "REPLACE into mysql_servers (hostgroup_id, hostname, port) values (1, '$SLAVE', 3306);"
-  done
-
-  # Save the config
-  if [ "$DEBUG" == "1" ]; then echo "Saving config"; fi
-  mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;"
-}
-
 bootstrap() {
   echo "Bootstrapping..."
 
@@ -72,9 +27,6 @@ bootstrap() {
   LOAD ADMIN VARIABLES TO RUNTIME;
   SAVE ADMIN VARIABLES TO DISK;"
 
-  # Add the mysql servers from orchestrator
-  seed_mysql_servers
-
   # Add user/pass to proxysql
   echo "Adding user/pass to proxysql"
   mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
@@ -90,7 +42,6 @@ bootstrap() {
   LOAD MYSQL QUERY RULES TO RUNTIME;
   SAVE MYSQL QUERY RULES TO DISK;"
 
-
   touch /ready.txt
   echo "Bootstrapping complete"
 }
@@ -98,11 +49,4 @@ bootstrap() {
 bootstrap
 
 # Start consul-template
-consul-template -template="/proxysql.ctmpl:/proxysql.sql" -exec="mysql -u admin -padmin -h 127.0.0.1 -P 6032 < /proxysql.sql"
-
-while true ; do
-  # Loop every 5 seconds and update the master and slaves
-  sleep 5
-  INIT=0
-  seed_mysql_servers
-done
+consul-template -log-level="info" -template="/proxysql.ctmpl:/proxysql.sql:sh -c 'mysql -u admin -padmin -h 127.0.0.1 -P 6032 < /proxysql.sql'"

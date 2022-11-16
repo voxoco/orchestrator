@@ -4,6 +4,7 @@
 DELETE FROM mysql_servers where hostgroup_id=0;
 REPLACE into mysql_servers (hostgroup_id, hostname) values ( 0, "{{ key (printf "mysql/master/%s/hostname" $dbname) }}" );
 {{ end }}
+DELETE FROM mysql_servers where hostgroup_id=1;
 {{ range tree (printf "mysql/slave/%s/%s" $dbname $region) }}
 REPLACE into mysql_servers (hostgroup_id, hostname) values ( 1, "{{ .Key }}" );
 {{ end }}
