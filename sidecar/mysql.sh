@@ -11,9 +11,22 @@ raft_leader() {
   RAFT_LEADER=$(curl -m 1 -s http://orc:3000/api/raft-leader | jq -r | sed 's/:.*//')
 }
 
+kv_put() {
+  # PUT key/value pair in Consul
+  curl -s -X PUT -d "$2" -H "X-Consul-Token: $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/$1"
+}
+
+kv_del() {
+  # DELETE key/value pair in Consul
+  curl -s -X DELETE -H "X-Consul-Token: $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/$1"
+}
+
 exit_script() {
   echo "Tearing down..."
   trap - SIGINT SIGTERM # clear the trap
+
+  # Delete this node from Consul
+  kv_del "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP"
 
   # Get raft leader
   raft_leader
@@ -134,6 +147,10 @@ EOF
   # Add this node to orchestrator
   echo "Adding this node $PODIP to orchestrator"
   curl -s http://$RAFT_LEADER:3000/api/discover/$PODIP/3306
+
+  # Add this node to Consul
+  echo "Adding this node $PODIP to Consul"
+  kv_put "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP" "3306"
 }
 
 backup() {
