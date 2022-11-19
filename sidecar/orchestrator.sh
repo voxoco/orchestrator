@@ -45,7 +45,7 @@ bootstrap() {
   sleep 5
 
   # Check consul kv to see if we have a leader
-  LEADER=$(curl -s -H "X-Consul-Token $CONSUL_HTTP_TOKEN" "https://$CONSUL_HTTP_ADDR/v1/kv/orchestrator/leader?raw")
+  LEADER=$(curl -s -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" "https://$CONSUL_HTTP_ADDR/v1/kv/orchestrator/leader?raw")
   if [ -z "$LEADER" ]; then
     echo "No leader found, setting this node as leader"
     kv_put "orchestrator/leader" "$PODIP"
