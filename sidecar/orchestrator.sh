@@ -3,6 +3,12 @@
 # LAST_RAFT_CHECK_TIME is the last time we checked raft follower status
 LAST_RAFT_CHECK_TIME=$(date +%s)
 
+kv_put() {
+  # PUT key/value pair in Consul
+  echo "Adding $1 to consul"
+  curl -s -X PUT -d "$2" -H "X-Consul-Token: $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/$1"
+}
+
 exit_script() {
   echo "Tearing down..."
   trap - SIGINT SIGTERM # clear the trap
@@ -38,34 +44,18 @@ bootstrap() {
   echo "Sleeping for 5 seconds"
   sleep 5
 
-  # Build array of alive orchestrator nodes by looping over the regions
-  RAFT_LEADER=""
-  for REGION in ${REGIONS}; do
-    NODE="${HOSTNAME::-2}-${HOSTNAME##*-}.${HOSTNAME::-2}.$POD_NAMESPACE.svc.$REGION"
-    HEALTHY=$(curl -m 1 -s http://$NODE:3000/api/raft-status)
+  # Check consul kv to see if we have a leader
+  LEADER=$(curl -s -H "X-Consul-Token $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/orchestrator/leader?raw")
+  if [ -z "$LEADER" ]; then
+    echo "No leader found, setting this node as leader"
+    kv_put "orchestrator/leader" "$PODIP"
+    LEADER=$PODIP
+    return
+  fi
 
-    echo "Checking if $NODE is healthy"
-
-    # Make sure we have some data before proceeding
-    if [ -z "$HEALTHY" ]; then continue; fi
-
-    # If the node is not part of the quorum, just skip it
-    if ! echo $HEALTHY | jq -r .IsPartOfQuorum; then continue; fi
-
-    # If we are here the node is healthy so check if it is this node
-    if [ "$(echo $HEALTHY | jq -r .Leader | sed 's/:.*//')" == "$PODIP" ]; then continue; fi
-
-    # Node is not this node and is part of the quorum, so it is the leader
-    RAFT_LEADER=$(echo $HEALTHY | jq -r .Leader | sed 's/:.*//')
-    
-    # Add this node to the raft cluster
-    echo "Adding this node to the raft cluster via leader: $RAFT_LEADER"
-    curl -m 2 -s http://$RAFT_LEADER:3000/api/raft-add-peer/$PODIP:10008
-    break
-
-    # If we get here, something went wrong
-    echo "Something is wrong.. No leader found?"
-  done
+  # Add this node to the raft cluster
+  echo "Adding this node to the raft cluster via leader: $LEADER"
+  curl -m 2 -s http://$LEADER:3000/api/raft-add-peer/$PODIP:10008
 }
 
 check_healthy_raft() {
@@ -78,6 +68,13 @@ check_healthy_raft() {
 
   # Check if we are a follower
   RAFT_STATUS=$(curl -m 1 -s http://127.0.0.1:3000/api/raft-status)
+  
+  # If we are the leader, update the consul kv with our IP
+  if [ "$(echo $RAFT_STATUS | jq -r .State)" = "Leader" ]; then
+    kv_put "orchestrator/leader" "$PODIP"
+    return
+  fi
+
   if [ "$(echo $RAFT_STATUS | jq -r .State)" != "Follower" ]; then return; fi
   
   # Get the leader
