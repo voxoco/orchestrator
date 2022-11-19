@@ -41,8 +41,8 @@ bootstrap() {
     return
   fi
 
-  echo "Sleeping for 5 seconds"
-  sleep 5
+  echo "Sleeping for 15 seconds"
+  sleep 15
 
   # Check consul kv to see if we have a leader
   LEADER=$(curl -s -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" "https://$CONSUL_HTTP_ADDR/v1/kv/orchestrator/leader?raw")
