@@ -6,7 +6,7 @@ LAST_RAFT_CHECK_TIME=$(date +%s)
 kv_put() {
   # PUT key/value pair in Consul
   echo "Adding $1 to consul"
-  curl -s -X PUT -d "$2" -H "X-Consul-Token: $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/$1"
+  curl -s -X PUT -d "$2" -H "X-Consul-Token: $CONSUL_HTTP_TOKEN" "https://$CONSUL_HTTP_ADDR/v1/kv/$1"
 }
 
 exit_script() {
@@ -45,7 +45,7 @@ bootstrap() {
   sleep 5
 
   # Check consul kv to see if we have a leader
-  LEADER=$(curl -s -H "X-Consul-Token $CONSUL_TOKEN" "https://$CONSUL_ADDRESS/v1/kv/orchestrator/leader?raw")
+  LEADER=$(curl -s -H "X-Consul-Token $CONSUL_HTTP_TOKEN" "https://$CONSUL_HTTP_ADDR/v1/kv/orchestrator/leader?raw")
   if [ -z "$LEADER" ]; then
     echo "No leader found, setting this node as leader"
     kv_put "orchestrator/leader" "$PODIP"
