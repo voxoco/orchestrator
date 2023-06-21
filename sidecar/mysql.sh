@@ -239,7 +239,7 @@ check_slave_status() {
   SLAVE_SQL_ERROR=$(echo "$SLAVE_STATUS" | grep Last_SQL_Error | awk '{print $2}')
 
   # Delete this node from Consul
-  kv_del "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP"
+  #kv_del "mysql/slave/$DB_NAME/$CLUSTER_NAME/$PODIP"
   
   # Send slack notification
   ./slack.sh "ERROR" "Slave not replicating on $PODIP" "IO Error: $SLAVE_IO_ERROR\nSQL Error: $SLAVE_SQL_ERROR"
