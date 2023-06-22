@@ -42,6 +42,9 @@ exit_script() {
     curl -s http://$RAFT_LEADER:3000/api/force-master-failover/$DB_NAME
     echo "force-master-failover complete"
   fi
+
+  sleep 5
+  exit
 }
 
 restore() {
