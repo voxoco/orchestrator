@@ -3,6 +3,8 @@
 # Last backup time in seconds since epoch
 LAST_BACKUP_TIME=$(date +%s)
 
+BACKUP_INTERVAL_HOURS=12
+
 # LAST_SLAVE_CHECK_TIME is the last time we checked slave replication status
 LAST_SLAVE_CHECK_TIME=$(date +%s)
 
@@ -202,8 +204,8 @@ EOF
   # Upload backup directory to S3
   s4cmd sync /tmp/backup s3://$S3_BUCKET/$DB_NAME
 
-  # Delete backups older than 7 days
-  find /tmp/backup/* -mtime +7 -exec rm {} \;
+  # Delete backups older than 4 days
+  find /tmp/backup/* -mtime +4 -exec rm {} \;
 
   echo "Backup uploaded to S3 and local backups older than 7 days deleted."
 }
