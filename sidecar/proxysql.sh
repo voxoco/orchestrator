@@ -20,8 +20,10 @@ bootstrap() {
   # Update the monitor variable
   echo "Updating monitor global variable"
   mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
-  UPDATE global_variables SET variable_value='false' WHERE variable_name='mysql-monitor_enabled';
+  # UPDATE global_variables SET variable_value='false' WHERE variable_name='mysql-monitor_enabled';
   UPDATE global_variables SET variable_value='true' WHERE variable_name='admin-restapi_enabled';
+  UPDATE global_variables SET variable_value='$DB_NAME' WHERE variable_name='mysql-monitor_username';
+  UPDATE global_variables SET variable_value='$DB_NAME' WHERE variable_name='mysql-monitor_password';
   LOAD MYSQL VARIABLES TO RUNTIME;
   SAVE MYSQL VARIABLES TO DISK;
   LOAD ADMIN VARIABLES TO RUNTIME;
