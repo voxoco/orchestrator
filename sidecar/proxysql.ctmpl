@@ -1,12 +1,24 @@
 {{$dbname := env "DB_NAME"}}
 {{$region := env "CLUSTER_NAME"}}
+{{$localWeight := 10000000}}
+{{$crossRegionWeight := 1}}
+
 {{ if keyExists (printf "mysql/master/%s/hostname" $dbname) }}
 DELETE FROM mysql_servers where hostgroup_id=0;
 REPLACE into mysql_servers (hostgroup_id, hostname) values ( 0, "{{ key (printf "mysql/master/%s/hostname" $dbname) }}" );
 {{ end }}
 DELETE FROM mysql_servers where hostgroup_id=1;
-{{ range tree (printf "mysql/slave/%s/%s" $dbname $region) }}
-REPLACE into mysql_servers (hostgroup_id, hostname) values ( 1, "{{ .Key }}" );
+
+{{ range tree (printf "mysql/slave/%s" $dbname) }}
+    {{ $parts := split "/" .Key }}
+    {{ $host := index $parts 1 }}
+    {{ $regionName := index $parts 0 }}
+    {{ if (eq $regionName $region) }}
+REPLACE into mysql_servers (hostgroup_id, hostname, weight) values ( 1, "{{ $host }}", {{ $localWeight }} );
+    {{ else }}
+REPLACE into mysql_servers (hostgroup_id, hostname, weight) values ( 1, "{{ $host }}", {{ $crossRegionWeight }} );
+    {{ end }}
 {{ end }}
+
 LOAD MYSQL SERVERS TO RUNTIME;
 SAVE MYSQL SERVERS TO DISK;
