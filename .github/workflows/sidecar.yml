@@ -9,6 +9,10 @@ on:
     # Publish `v1.2.3` tags as releases.
     tags:
       - v1
+  
+  pull_request:
+    branches:
+      - main
 
 env:
   # TODO: Change variable to your image's name.
@@ -20,7 +24,6 @@ jobs:
   # See also https://docs.docker.com/docker-hub/builds/
   push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v2
@@ -30,10 +33,12 @@ jobs:
           cd sidecar
           docker build . --file Dockerfile --tag $IMAGE_NAME
       - name: Log into GitHub Container Registry
+        if: github.event_name == 'push'
         # TODO: Create a PAT with `read:packages` and `write:packages` scopes and save it as an Actions secret `CR_PAT`
         run: echo "${{ secrets.CR_PAT }}" | docker login https://ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Push image to GitHub Container Registry
+        if: github.event_name == 'push'
         run: |
           IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
           # Change all uppercase to lowercase
