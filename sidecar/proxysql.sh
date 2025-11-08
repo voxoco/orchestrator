@@ -1,5 +1,8 @@
 #!/bin/sh
 
+PRIMARY_HOST=$(echo "$MYSQL_PRIMARY_URL" | sed -n 's|.*://\([^@]*@\)\?\([^:/]*\).*|\2|p')
+READER_HOST=$(echo "$MYSQL_READER_URL" | sed -n 's|.*://\([^@]*@\)\?\([^:/]*\).*|\2|p')
+
 bootstrap() {
   echo "Bootstrapping..."
 
@@ -44,11 +47,24 @@ bootstrap() {
   LOAD MYSQL QUERY RULES TO RUNTIME;
   SAVE MYSQL QUERY RULES TO DISK;"
 
+  # Add mysql_servers
+  echo "Adding mysql_servers"
+  mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
+  DELETE FROM mysql_servers where hostgroup_id=0;
+  INSERT into mysql_servers (hostgroup_id, hostname) values (0, '$PRIMARY_HOST');
+  DELETE FROM mysql_servers where hostgroup_id=1;
+  INSERT into mysql_servers (hostgroup_id, hostname, weight) values (1, '$READER_HOST', 10000000);
+  INSERT into mysql_servers (hostgroup_id, hostname, weight) values (1, '$PRIMARY_HOST', 1);
+  LOAD MYSQL SERVERS TO RUNTIME;
+  SAVE MYSQL SERVERS TO DISK;"
+
   touch /ready.txt
   echo "Bootstrapping complete"
 }
 
 bootstrap
 
+sleep infinity
+
 # Start consul-template
-consul-template -log-level="info" -template="/proxysql.ctmpl:/proxysql.sql:sh -c 'mysql -u admin -padmin -h 127.0.0.1 -P 6032 < /proxysql.sql'"
+#consul-template -log-level="info" -template="/proxysql.ctmpl:/proxysql.sql:sh -c 'mysql -u admin -padmin -h 127.0.0.1 -P 6032 < /proxysql.sql'"
