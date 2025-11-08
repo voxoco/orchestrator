@@ -51,10 +51,14 @@ bootstrap() {
   echo "Adding mysql_servers"
   mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
   DELETE FROM mysql_servers where hostgroup_id=0;
-  INSERT IGNORE into mysql_servers (hostgroup_id, hostname) values (0, '$PRIMARY_HOST');
+  INSERT into mysql_servers (hostgroup_id, hostname) values (0, '$PRIMARY_HOST');
   DELETE FROM mysql_servers where hostgroup_id=1;
-  INSERT IGNORE into mysql_servers (hostgroup_id, hostname, weight) values (1, '$READER_HOST', 10000000);
-  INSERT IGNORE into mysql_servers (hostgroup_id, hostname, weight) values (1, '$PRIMARY_HOST', 1);
+  INSERT into mysql_servers (hostgroup_id, hostname, weight) values (1, '$READER_HOST', 10000000);"
+
+  mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
+  INSERT into mysql_servers (hostgroup_id, hostname, weight) values (1, '$PRIMARY_HOST', 1);" 2>/dev/null || true
+
+  mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
   LOAD MYSQL SERVERS TO RUNTIME;
   SAVE MYSQL SERVERS TO DISK;"
 
