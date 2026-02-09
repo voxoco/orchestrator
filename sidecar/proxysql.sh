@@ -27,6 +27,7 @@ bootstrap() {
   UPDATE global_variables SET variable_value='true' WHERE variable_name='admin-restapi_enabled';
   UPDATE global_variables SET variable_value='$DB_NAME' WHERE variable_name='mysql-monitor_username';
   UPDATE global_variables SET variable_value='$DB_NAME' WHERE variable_name='mysql-monitor_password';
+  UPDATE global_variables SET variable_value='true' WHERE variable_name='mysql-have_ssl';
   LOAD MYSQL VARIABLES TO RUNTIME;
   SAVE MYSQL VARIABLES TO DISK;
   LOAD ADMIN VARIABLES TO RUNTIME;
@@ -51,12 +52,12 @@ bootstrap() {
   echo "Adding mysql_servers"
   mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
   DELETE FROM mysql_servers where hostgroup_id=0;
-  INSERT into mysql_servers (hostgroup_id, hostname) values (0, '$PRIMARY_HOST');
+  INSERT into mysql_servers (hostgroup_id, hostname, use_ssl) values (0, '$PRIMARY_HOST', 1);
   DELETE FROM mysql_servers where hostgroup_id=1;
-  INSERT into mysql_servers (hostgroup_id, hostname, weight) values (1, '$READER_HOST', 10000000);"
+  INSERT into mysql_servers (hostgroup_id, hostname, weight, use_ssl) values (1, '$READER_HOST', 10000000, 1);"
 
   mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
-  INSERT into mysql_servers (hostgroup_id, hostname, weight) values (1, '$PRIMARY_HOST', 1);" 2>/dev/null || true
+  INSERT into mysql_servers (hostgroup_id, hostname, weight, use_ssl) values (1, '$PRIMARY_HOST', 1, 1);" 2>/dev/null || true
 
   mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "
   LOAD MYSQL SERVERS TO RUNTIME;
